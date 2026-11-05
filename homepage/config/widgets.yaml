@@ -1,0 +1,18 @@
+# Widgets du haut de page — https://gethomepage.dev/widgets/
+- resources:
+    label: Serveur
+    cpu: true
+    memory: true
+    disk: /
+    uptime: true
+
+- datetime:
+    text_size: md
+    locale: fr
+    format:
+      dateStyle: full
+      timeStyle: short
+
+- search:
+    provider: duckduckgo
+    target: _blank

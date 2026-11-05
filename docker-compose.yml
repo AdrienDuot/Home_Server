@@ -1,0 +1,184 @@
+# =====================================================================
+#  Home Server — Immich · Jellyfin · Seerr · Vaultwarden · Uptime Kuma · Homepage
+#  Toutes les valeurs ${...} viennent du fichier .env (copié depuis .env.example)
+#  Démarrage :  docker compose up -d
+# =====================================================================
+
+name: homeserver
+
+x-common: &common
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+
+  # -------------------------------------------------------------------
+  #  IMMICH — sauvegarde de photos (alternative à Google Photos)
+  #  http://IP:2283
+  # -------------------------------------------------------------------
+  immich-server:
+    <<: *common
+    container_name: immich_server
+    image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-release}
+    # Accélération matérielle (Intel Quick Sync) pour les vidéos : décommenter
+    # devices:
+    #   - /dev/dri:/dev/dri
+    volumes:
+      - ${PHOTOS_LOCATION}:/data
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      TZ: ${TZ}
+      DB_HOSTNAME: immich-database
+      DB_USERNAME: ${IMMICH_DB_USERNAME}
+      DB_PASSWORD: ${IMMICH_DB_PASSWORD}
+      DB_DATABASE_NAME: ${IMMICH_DB_DATABASE_NAME}
+      REDIS_HOSTNAME: immich-redis
+    ports:
+      - "2283:2283"
+    depends_on:
+      - immich-redis
+      - immich-database
+    healthcheck:
+      disable: false
+
+  immich-machine-learning:
+    <<: *common
+    container_name: immich_machine_learning
+    image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-release}
+    volumes:
+      - immich-model-cache:/cache
+    environment:
+      TZ: ${TZ}
+    healthcheck:
+      disable: false
+
+  immich-redis:
+    <<: *common
+    container_name: immich_redis
+    image: docker.io/valkey/valkey:9
+    healthcheck:
+      test: redis-cli ping || exit 1
+
+  immich-database:
+    <<: *common
+    container_name: immich_postgres
+    image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0
+    environment:
+      POSTGRES_PASSWORD: ${IMMICH_DB_PASSWORD}
+      POSTGRES_USER: ${IMMICH_DB_USERNAME}
+      POSTGRES_DB: ${IMMICH_DB_DATABASE_NAME}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+      # Si la base est sur un disque dur classique (pas un SSD), décommenter :
+      # DB_STORAGE_TYPE: "HDD"
+    volumes:
+      - ${APPDATA}/immich/postgres:/var/lib/postgresql/data
+    shm_size: 128mb
+
+  # -------------------------------------------------------------------
+  #  JELLYFIN — le « mini Netflix »
+  #  http://IP:8096
+  # -------------------------------------------------------------------
+  jellyfin:
+    <<: *common
+    container_name: jellyfin
+    image: jellyfin/jellyfin:latest
+    user: "${PUID}:${PGID}"
+    environment:
+      TZ: ${TZ}
+      JELLYFIN_PublishedServerUrl: http://${SERVER_IP}:8096
+    volumes:
+      - ${APPDATA}/jellyfin/config:/config
+      - ${APPDATA}/jellyfin/cache:/cache
+      - ${MEDIA_LOCATION}:/media:ro
+    ports:
+      - "8096:8096"
+      - "7359:7359/udp"   # découverte automatique sur le réseau local
+    # Accélération matérielle (Intel Quick Sync / AMD) : décommenter
+    # Ajoute aussi le groupe "render" : getent group render | cut -d: -f3
+    # devices:
+    #   - /dev/dri:/dev/dri
+    # group_add:
+    #   - "993"
+
+  # -------------------------------------------------------------------
+  #  SEERR (ex-Jellyseerr) — demandes de films/séries
+  #  http://IP:5055
+  # -------------------------------------------------------------------
+  seerr:
+    <<: *common
+    container_name: seerr
+    image: ghcr.io/seerr-team/seerr:latest
+    init: true
+    environment:
+      TZ: ${TZ}
+      LOG_LEVEL: info
+    volumes:
+      - ${APPDATA}/seerr:/app/config   # doit appartenir à l'UID 1000 (fait par install.sh)
+    ports:
+      - "5055:5055"
+    depends_on:
+      - jellyfin
+
+  # -------------------------------------------------------------------
+  #  VAULTWARDEN — gestionnaire de mots de passe (compatible Bitwarden)
+  #  http://IP:8222  (⚠ HTTPS obligatoire pour le coffre web — voir README)
+  # -------------------------------------------------------------------
+  vaultwarden:
+    <<: *common
+    container_name: vaultwarden
+    image: vaultwarden/server:latest
+    environment:
+      TZ: ${TZ}
+      DOMAIN: ${VAULTWARDEN_DOMAIN}
+      SIGNUPS_ALLOWED: ${VAULTWARDEN_SIGNUPS_ALLOWED}
+      ADMIN_TOKEN: ${VAULTWARDEN_ADMIN_TOKEN}
+    volumes:
+      - ${APPDATA}/vaultwarden:/data
+    ports:
+      - "8222:80"
+
+  # -------------------------------------------------------------------
+  #  UPTIME KUMA — surveillance des services
+  #  http://IP:3001
+  # -------------------------------------------------------------------
+  uptime-kuma:
+    <<: *common
+    container_name: uptime-kuma
+    image: louislam/uptime-kuma:2
+    environment:
+      TZ: ${TZ}
+    volumes:
+      - ${APPDATA}/uptime-kuma:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "3001:3001"
+
+  # -------------------------------------------------------------------
+  #  HOMEPAGE — page d'accueil qui regroupe tout
+  #  http://IP:3000
+  # -------------------------------------------------------------------
+  homepage:
+    <<: *common
+    container_name: homepage
+    image: ghcr.io/gethomepage/homepage:latest
+    environment:
+      TZ: ${TZ}
+      PUID: ${PUID}
+      PGID: ${PGID}
+      HOMEPAGE_ALLOWED_HOSTS: ${HOMEPAGE_ALLOWED_HOSTS}
+      HOMEPAGE_VAR_SERVER_IP: ${SERVER_IP}
+      HOMEPAGE_VAR_JELLYFIN_KEY: ${HOMEPAGE_JELLYFIN_KEY}
+      HOMEPAGE_VAR_IMMICH_KEY: ${HOMEPAGE_IMMICH_KEY}
+      HOMEPAGE_VAR_SEERR_KEY: ${HOMEPAGE_SEERR_KEY}
+    volumes:
+      - ./homepage/config:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "3000:3000"
+
+volumes:
+  immich-model-cache:

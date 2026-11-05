@@ -1,0 +1,14 @@
+# Secrets
+.env
+
+# Données (si APPDATA/PHOTOS/MEDIA sont placés dans le dépôt)
+data/
+appdata/
+
+# Fichiers générés par Homepage
+homepage/config/logs/
+
+# Sauvegardes
+backups/
+*.sql.gz
+*.tar.gz

@@ -1,0 +1,11 @@
+# Liens rapides — https://gethomepage.dev/configs/bookmarks/
+- Documentation:
+    - Immich:
+        - abbr: IM
+          href: https://docs.immich.app/
+    - Jellyfin:
+        - abbr: JF
+          href: https://jellyfin.org/docs/
+    - Homepage:
+        - abbr: HP
+          href: https://gethomepage.dev/

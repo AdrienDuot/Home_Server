@@ -1,0 +1,13 @@
+# Réglages généraux de Homepage — https://gethomepage.dev/configs/settings/
+title: Serveur Maison
+language: fr
+theme: dark
+color: slate
+headerStyle: clean
+layout:
+  Médias:
+    style: row
+    columns: 3
+  Outils:
+    style: row
+    columns: 2

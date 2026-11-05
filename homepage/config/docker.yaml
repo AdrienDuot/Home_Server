@@ -1,0 +1,3 @@
+# Connexion à Docker pour afficher l'état (en marche / arrêté) des conteneurs
+my-docker:
+  socket: /var/run/docker.sock
